@@ -7,13 +7,12 @@ A sandboxed testbed for LLM agent security. A target agent calls simulated MCP t
 We attack an AI agent through two doors, **poisoned tool descriptions** and **social-engineering conversations** (plus a chained attack using both), and measure which defenses hold: a hardened prompt, signed tool manifests, capability tokens, and a monitor agent.
 
 - **Start with [`docs/`](docs/README.md):** [solution architecture](docs/architecture/solution.md) (what and why), [technical architecture](docs/architecture/technical.md) (how), [roadmap](docs/roadmap.md), [decision log](docs/decision-log.md).
-- **Work is tracked as GitHub issues** generated from [`docs/backlog.yaml`](docs/backlog.yaml).
+
 
 ## Prerequisites
 
 - [uv](https://docs.astral.sh/uv/)
 - A **Google AI Studio API key** on the free tier (aistudio.google.com, "Get API key", in a project with **no billing account**). No Google Cloud billing or gcloud login is needed.
-- Optional: the GitHub CLI (`gh`) to create issues from the backlog.
 
 Offline tests need no key. `make smoke` and `make demo` call the real model.
 
@@ -71,11 +70,10 @@ agent-sec/
   scripts/
     smoke_llm.py         one dummy tool call against TARGET_MODEL
     demo_task.py         one real task end to end
-    create_issues.py     GitHub issues from docs/backlog.yaml
   tests/
   analysis/
   paper/game.md
-  docs/                architecture, roadmap, decisions, backlog, Cursor prompts
+  docs/                architecture, roadmap, decisions
   runs/                  gitignored JSONL output
 ```
 

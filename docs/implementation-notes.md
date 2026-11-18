@@ -1,6 +1,6 @@
 # Implementation notes
 
-Low-level notes on how components were built: library quirks, exact formats, edge cases. Moved from the gitignored `decisions.md` so both teammates can see them. Cursor (or anyone) should append here, newest section last. Decisions that change project direction go in [decision-log.md](decision-log.md) instead.
+Low-level notes on how components were built: library quirks, exact formats, edge cases. Moved from the gitignored `decisions.md` so both teammates can see them. Anyone should append here, newest section last. Decisions that change project direction go in [decision-log.md](decision-log.md) instead.
 
 ## 2026-11-17
 

@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestones match the GitHub milestones created from [`backlog.yaml`](backlog.yaml). Check items off as their issues close.
+Milestones match the GitHub milestones. Check items off as their issues close.
 
 ## M1 · Foundation ✅
 - [x] Repo scaffold (uv, tests, lint, Makefile)

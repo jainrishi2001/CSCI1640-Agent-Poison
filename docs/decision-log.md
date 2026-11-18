@@ -6,8 +6,6 @@ Format: **date: decision.** Why. Consequences.
 
 ---
 
-**2026-11-18: GitHub issues are generated from `docs/backlog.yaml`.** One editable source for scope; `scripts/create_issues.py` skips issues that already exist, so it is safe to rerun after adding new entries.
-
 **2026-11-17: Pin `SYSTEM_AS_USER=false`.** A live run showed Gemma 4 31B accepts the system role (`system_role_mode = system`). Pinning it means every run uses the same instruction placement, which matters because placement affects injection resistance. Report it in the paper.
 
 **2026-11-17: Write our own door-1 cases in MCPTox's three styles instead of depending on the MCPTox dataset.** The dataset is only available through an anonymized link that may disappear, and its cases target real servers we don't run. We cite MCPTox for the design (P1/P2/P3 plus rug pulls).
