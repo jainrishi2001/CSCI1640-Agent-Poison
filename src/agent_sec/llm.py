@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import threading
 import time
 from collections.abc import Mapping, Sequence
@@ -32,15 +33,19 @@ from litellm.exceptions import (
     Timeout,
 )
 from litellm.types.utils import ModelResponse
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from agent_sec.config import Settings, get_settings
+
+litellm.suppress_debug_info = True
 
 logger = logging.getLogger(__name__)
 
 _WINDOW_SECONDS = 60.0
 _PACIFIC = ZoneInfo("America/Los_Angeles")
 _RATE_LIMIT_ATTEMPTS = 5
+_OVERLOAD_ATTEMPTS = 6
+_OVERLOAD_BASE_S = 10.0
+_OVERLOAD_CAP_S = 60.0
 _RETRYABLE = (
     APIConnectionError,
     ServiceUnavailableError,
@@ -55,7 +60,7 @@ _system_role_fold: set[str] = set()
 
 
 class Clock(Protocol):
-    """Monotonic-enough timeline the limiter and 429 backoff sleep on."""
+    """Timeline used for quota windows, 429 backoff, and overload retries."""
 
     def now(self) -> float:
         """Return a Unix timestamp in seconds."""
@@ -442,13 +447,22 @@ def _retry_after_seconds(exc: RateLimitError, clock: Clock) -> float | None:
     return max(0.0, when.timestamp() - clock.now())
 
 
-@retry(
-    retry=retry_if_exception_type(_RETRYABLE),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=8),
-    reraise=True,
-)
-def _attempt(
+def _overload_jitter() -> float:
+    """Up to one extra second so concurrent retries do not wake together."""
+    return random.uniform(0.0, 1.0)
+
+
+def _overload_delay(failed_attempt: int) -> float:
+    """Exponential wait after a provider failure. ``failed_attempt`` is 1-based.
+
+    The sequence is 10s, 20s, 40s, then 60s, plus up to one second of jitter.
+    Five waits across six attempts total a little over three minutes.
+    """
+    growth = _OVERLOAD_BASE_S * (2 ** (failed_attempt - 1))
+    return min(_OVERLOAD_CAP_S, growth) + _overload_jitter()
+
+
+def _send_once(
     model: str,
     estimated_tokens: int,
     call_kwargs: dict[str, Any],
@@ -472,7 +486,12 @@ def _invoke(
     extra: Mapping[str, Any],
     limiter: RateLimiter,
 ) -> tuple[ModelResponse, float, float]:
-    """Run one logical chat, honoring 429 hints for up to five attempts."""
+    """Run one logical chat.
+
+    A 429 is retried up to five times, honoring ``Retry-After`` when present.
+    Provider overload (503, 500, 502, timeout, connection error) is retried up
+    to six times on the limiter clock.
+    """
     outbound = [dict(message) for message in messages]
     estimated = _estimate_tokens(model, outbound, tools)
     call_kwargs: dict[str, Any] = dict(extra)
@@ -484,12 +503,16 @@ def _invoke(
         call_kwargs["temperature"] = temperature
     backoff = 1.0
     rate_limit_wait = 0.0
+    overload_wait = 0.0
     limiter_waits: list[float] = []
-    for attempt in range(_RATE_LIMIT_ATTEMPTS):
+    rate_attempt = 0
+    overload_attempt = 0
+    while True:
         try:
-            response, latency_s = _attempt(model, estimated, call_kwargs, limiter, limiter_waits)
+            response, latency_s = _send_once(model, estimated, call_kwargs, limiter, limiter_waits)
         except RateLimitError as exc:
-            if attempt + 1 >= _RATE_LIMIT_ATTEMPTS:
+            rate_attempt += 1
+            if rate_attempt >= _RATE_LIMIT_ATTEMPTS:
                 raise
             delay = _retry_after_seconds(exc, limiter.clock)
             if delay is None:
@@ -498,16 +521,31 @@ def _invoke(
             logger.warning(
                 "llm.chat rate limited model=%s attempt=%s sleep_s=%.3f",
                 model,
-                attempt + 1,
+                rate_attempt,
                 delay,
             )
             limiter.clock.sleep(delay)
             rate_limit_wait += delay
             continue
+        except _RETRYABLE as exc:
+            overload_attempt += 1
+            if overload_attempt >= _OVERLOAD_ATTEMPTS:
+                raise
+            delay = _overload_delay(overload_attempt)
+            logger.warning(
+                "llm.chat overloaded model=%s attempt=%s wait_s=%.1f status=%s",
+                model,
+                overload_attempt,
+                delay,
+                getattr(exc, "status_code", None),
+            )
+            limiter.clock.sleep(delay)
+            overload_wait += delay
+            continue
         actual = _total_tokens(response, estimated)
         limiter.after_call(model, actual)
-        return response, latency_s, sum(limiter_waits) + rate_limit_wait
-    raise RuntimeError("rate-limit loop exited without a response or an error")
+        waited = sum(limiter_waits) + rate_limit_wait + overload_wait
+        return response, latency_s, waited
 
 
 def _total_tokens(response: ModelResponse, fallback: int) -> int:

@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from litellm.exceptions import RateLimitError
+from litellm.exceptions import RateLimitError, ServiceUnavailableError
 from litellm.types.utils import ModelResponse
 
 from agent_sec import llm as llm_module
@@ -156,6 +156,36 @@ def test_retry_after_is_honored_and_backoff_is_exponential(
     monkeypatch.setattr(llm_module.litellm, "completion", completion_without_hint)
     _invoke("m", [{"role": "user", "content": "hi"}], None, None, {}, limiter2)
     assert clock2.t == 1_700_000_000.0 + 3
+
+
+def test_provider_overload_retries_then_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = FakeClock()
+    limiter = _limiter(tmp_path / "quota.json", clock, rpm=100, tpm=100_000, rpd=100)
+    calls = {"n": 0}
+
+    def completion(**_kwargs: object) -> ModelResponse:
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise ServiceUnavailableError("unavailable", "gemini", "m")
+        return _text_response("ok")
+
+    monkeypatch.setattr(llm_module.litellm, "completion", completion)
+    monkeypatch.setattr(llm_module.litellm, "token_counter", lambda **_kwargs: 4)
+    monkeypatch.setattr(llm_module, "_overload_jitter", lambda: 0.0)
+    response, _latency, waited = _invoke(
+        "m",
+        [{"role": "user", "content": "hi"}],
+        None,
+        None,
+        {},
+        limiter,
+    )
+    assert calls["n"] == 3
+    assert clock.t == 1_700_000_000.0 + 30
+    assert waited == 30
+    assert response.choices[0].message.content == "ok"
 
 
 def test_system_prompt_folds_into_the_user_message() -> None:
