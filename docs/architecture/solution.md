@@ -6,6 +6,8 @@
 
 This document explains *what* we are building and *why*. For *how* the code is organized, see [technical.md](technical.md).
 
+![Solution architecture overview](solution-architecture.png)
+
 ---
 
 ## 1. The problem in one paragraph
