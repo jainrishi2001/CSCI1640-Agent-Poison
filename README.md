@@ -8,6 +8,7 @@ We attack an AI agent through two doors, **poisoned tool descriptions** and **so
 
 - **Start with [`docs/`](docs/README.md):** [solution architecture](docs/architecture/solution.md) (what and why), [technical architecture](docs/architecture/technical.md) (how), [roadmap](docs/roadmap.md), [decision log](docs/decision-log.md).
 
+![Solution architecture: attacks, sandboxed testbed with the policy gateway and defenses, measurement pipeline, and project plan](docs/architecture/solution-architecture.png)
 
 ## Prerequisites
 
