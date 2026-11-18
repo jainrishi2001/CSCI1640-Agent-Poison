@@ -79,7 +79,7 @@ flowchart TB
 | `scripts/smoke_llm.py`, `scripts/demo_task.py` | One-call smoke test; one real end-to-end task | ✅ |
 | `tests/` | Offline tests (no network, fake LLM) | ✅ 28+ tests |
 | `paper/game.md` | Security game write-up | ⬜ |
-| `docs/` | These docs, backlog, Cursor prompts | ✅ |
+| `docs/` | These docs| ✅ |
 
 ## 3. What happens in one agent turn
 
