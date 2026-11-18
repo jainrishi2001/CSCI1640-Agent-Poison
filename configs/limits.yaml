@@ -1,0 +1,6 @@
+safety_margin: 0.85   # use 85% of each limit
+models:
+  gemini/gemma-4-31b-it:        {rpm: 30, tpm: 16000,  rpd: 14400}
+  gemini/gemma-4-26b-a4b-it:    {rpm: 30, tpm: 16000,  rpd: 14400}
+  gemini/gemini-3.1-flash-lite: {rpm: 15, tpm: 250000, rpd: 500}
+  gemini/gemini-3.5-flash-lite: {rpm: 15, tpm: 250000, rpd: 500}

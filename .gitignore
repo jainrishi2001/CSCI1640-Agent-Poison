@@ -8,3 +8,4 @@ __pycache__/
 .ipynb_checkpoints/
 attacks/mcptox_subset/raw/
 decisions.md
+**/.DS_Store

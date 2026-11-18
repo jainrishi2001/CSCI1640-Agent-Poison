@@ -61,3 +61,46 @@ def verify_pin(tool_def: Mapping[str, Any], pin: str) -> bool:
     if len(candidate) != len(actual):
         return False
     return hmac.compare_digest(actual, candidate)
+
+
+def _first_present(source: Any, names: tuple[str, ...]) -> Any:
+    if isinstance(source, Mapping):
+        for name in names:
+            if name in source and source[name] is not None:
+                return source[name]
+        return None
+    for name in names:
+        value = getattr(source, name, None)
+        if value is not None:
+            return value
+    return None
+
+
+def _as_schema(schema: Any) -> dict[str, Any]:
+    if schema is None:
+        return {"type": "object", "properties": {}}
+    if hasattr(schema, "model_dump"):
+        dumped = schema.model_dump(exclude_none=True)
+        if isinstance(dumped, dict):
+            return dumped
+    if isinstance(schema, Mapping):
+        return dict(schema)
+    raise TypeError(f"unsupported input schema type: {type(schema).__name__}")
+
+
+def tool_def_from_mcp(tool: Any) -> dict[str, Any]:
+    """Return ``{name, description, input_schema}`` from an MCP tool or a dict.
+
+    MCP listings call the schema ``inputSchema``. This canonical form, and the
+    bytes we sign, call it ``input_schema``. Either key or attribute is accepted.
+    """
+    name = _first_present(tool, ("name",))
+    if not isinstance(name, str) or name == "":
+        raise ValueError("tool definition is missing a name")
+    description = _first_present(tool, ("description",))
+    schema = _first_present(tool, ("input_schema", "inputSchema"))
+    return {
+        "name": name,
+        "description": "" if description is None else str(description),
+        "input_schema": _as_schema(schema),
+    }

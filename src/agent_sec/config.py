@@ -1,8 +1,8 @@
 """Runtime settings loaded from the process environment and an optional ``.env``.
 
 Model ids are never hardcoded. Callers read ``target_model``, ``attacker_model``,
-and ``monitor_model`` from the environment (LiteLLM strings such as
-``vertex_ai/<model-name>``).
+and ``monitor_model`` from the environment. Gemini free-tier ids look like
+``gemini/<model-name>``; Vertex ids look like ``vertex_ai/<model-name>``.
 """
 
 from pydantic import field_validator
@@ -25,11 +25,23 @@ class Settings(BaseSettings):
     monitor_model: str
     gemini_api_key: str | None = None
     runs_dir: str = "runs"
+    # None means auto-detect: fold a system prompt into the user message only
+    # after a model rejects the system role. True always folds; False never does.
+    system_as_user: bool | None = None
 
     @field_validator("gemini_api_key", mode="before")
     @classmethod
     def _blank_api_key_is_none(cls, value: object) -> object:
         if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
+
+    @field_validator("system_as_user", mode="before")
+    @classmethod
+    def _auto_system_role(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str) and value.strip().lower() in {"", "auto"}:
             return None
         return value
 

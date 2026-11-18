@@ -1,8 +1,16 @@
 """Sign a manifest, then confirm description and schema changes fail verification."""
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from fastmcp import Client
 
-from agent_sec.gateway.signing import sha256_pin, sign_manifest, verify_manifest, verify_pin
+from agent_sec.gateway.signing import (
+    sha256_pin,
+    sign_manifest,
+    tool_def_from_mcp,
+    verify_manifest,
+    verify_pin,
+)
+from agent_sec.servers.benign import mcp
 
 
 def _tool() -> dict:
@@ -62,3 +70,23 @@ def test_schema_change_fails_verification() -> None:
 
     assert not verify_manifest(changed, signature, private_key.public_key())
     assert not verify_pin(changed, sha256_pin(tool))
+
+
+def test_tool_def_from_mcp_accepts_input_schema_alias() -> None:
+    schema = {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}
+    canonical = tool_def_from_mcp(
+        {"name": "read_file", "description": "Read.", "inputSchema": schema}
+    )
+    assert canonical == {"name": "read_file", "description": "Read.", "input_schema": schema}
+
+
+async def test_tool_def_from_mcp_fastmcp_tool() -> None:
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
+    tool = next(item for item in tools if item.name == "read_file")
+    canonical = tool_def_from_mcp(tool)
+
+    assert set(canonical) == {"name", "description", "input_schema"}
+    assert canonical["name"] == "read_file"
+    assert "path" in canonical["input_schema"]["properties"]
+    assert canonical["description"]

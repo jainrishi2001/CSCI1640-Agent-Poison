@@ -1,4 +1,4 @@
-.PHONY: setup test lint smoke
+.PHONY: setup test lint smoke demo
 
 setup:
 	uv sync
@@ -11,3 +11,6 @@ lint:
 
 smoke:
 	uv run python scripts/smoke_llm.py
+
+demo:
+	uv run python scripts/demo_task.py
