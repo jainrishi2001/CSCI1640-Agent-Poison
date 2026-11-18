@@ -103,6 +103,7 @@ class CallStats:
     completion_tokens: int | None
     total_tokens: int | None
     cost_usd: float
+    system_role_mode: str
 
 
 class DailyQuotaExceeded(RuntimeError):
@@ -390,8 +391,21 @@ def fold_system_into_user(messages: Sequence[Mapping[str, Any]]) -> list[dict[st
 
 
 def _rejects_system_role(exc: BaseException) -> bool:
+    """Return whether ``exc`` clearly means the system role itself was rejected.
+
+    A bare mention of "system" is not enough: rate-limit and overload errors
+    can contain that word. The match is limited to developer instructions,
+    system instructions, or a system role the provider says it does not support.
+    """
     text = str(exc).lower()
-    return "system" in text or "developer instruction" in text
+    if "developer instruction" in text or "system instruction" in text:
+        return True
+    if "system role" not in text:
+        return False
+    return any(
+        phrase in text
+        for phrase in ("not support", "unsupported", "not enabled", "invalid", "rejected")
+    )
 
 
 def _should_fold(model: str, settings: Settings) -> bool:
@@ -516,6 +530,7 @@ def _attach_stats(
     model: str,
     latency_s: float,
     waited_s: float,
+    system_role_mode: str,
 ) -> CallStats:
     usage = response.usage
     stats = CallStats(
@@ -526,6 +541,7 @@ def _attach_stats(
         completion_tokens=_optional_int(getattr(usage, "completion_tokens", None)),
         total_tokens=_optional_int(getattr(usage, "total_tokens", None)),
         cost_usd=_completion_cost(response),
+        system_role_mode=system_role_mode,
     )
     response.call_stats = stats
     logger.info(
@@ -580,9 +596,8 @@ def chat(
     chosen = settings.target_model if model is None else model
     limiter = get_rate_limiter()
     extra = _build_call_kwargs_for_vertex(chosen, settings, kwargs)
-    outbound: list[dict[str, Any]] = (
-        fold_system_into_user(messages) if _should_fold(chosen, settings) else list(messages)
-    )
+    folded = _should_fold(chosen, settings)
+    outbound: list[dict[str, Any]] = fold_system_into_user(messages) if folded else list(messages)
     try:
         response, latency_s, waited_s = _invoke(
             chosen, outbound, tools, temperature, extra, limiter
@@ -598,7 +613,11 @@ def chat(
             raise
         logger.info("llm.chat folding system role into the user message for %s", chosen)
         _system_role_fold.add(chosen)
-        folded = fold_system_into_user(messages)
-        response, latency_s, waited_s = _invoke(chosen, folded, tools, temperature, extra, limiter)
-    _attach_stats(response, chosen, latency_s, waited_s)
+        folded = True
+        outbound = fold_system_into_user(messages)
+        response, latency_s, waited_s = _invoke(
+            chosen, outbound, tools, temperature, extra, limiter
+        )
+    mode = "folded" if folded else "system"
+    _attach_stats(response, chosen, latency_s, waited_s, mode)
     return response

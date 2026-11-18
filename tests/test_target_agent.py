@@ -1,6 +1,9 @@
 """Target agent loop with a scripted model. No network."""
 
+import asyncio
 import json
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -219,3 +222,45 @@ async def test_malformed_tool_arguments_are_returned_to_the_model(tmp_path: Path
         message for message in llm.calls[1]["messages"] if message.get("role") == "tool"
     ]
     assert "malformed tool arguments" in tool_messages[0]["content"]
+
+
+class SleepingLLM:
+    """Block inside the model call so a concurrency test can see overlapping turns."""
+
+    def __init__(self, delay_s: float) -> None:
+        self.delay_s = delay_s
+        self.intervals: list[tuple[float, float]] = []
+        self._lock = threading.Lock()
+
+    def __call__(self, messages, tools=None, model=None, temperature=None, **_kwargs):
+        started = time.perf_counter()
+        time.sleep(self.delay_s)
+        finished = time.perf_counter()
+        with self._lock:
+            self.intervals.append((started, finished))
+        return _text_response("done")
+
+
+async def test_two_agents_respond_calls_overlap(tmp_path: Path) -> None:
+    llm = SleepingLLM(0.3)
+    agents = []
+    for name in ("a", "b"):
+        agent, _log_path = _agent(tmp_path / name, _server([]), llm)
+        agents.append(agent)
+
+    results = await asyncio.gather(
+        agents[0].respond([{"role": "user", "content": "Say A."}], "run-a"),
+        agents[1].respond([{"role": "user", "content": "Say B."}], "run-b"),
+    )
+
+    assert [result.final_text for result in results] == ["done", "done"]
+    assert len(llm.intervals) == 2
+    (start_a, end_a), (start_b, end_b) = llm.intervals
+    assert start_a < end_b and start_b < end_a
+    for name in ("a", "b"):
+        modes = [
+            event["payload"]["value"]
+            for event in _events(tmp_path / name / "run.jsonl")
+            if event["event_type"] == "system_role_mode"
+        ]
+        assert modes == ["system"]

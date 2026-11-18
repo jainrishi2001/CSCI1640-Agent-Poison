@@ -215,6 +215,46 @@ def test_chat_retries_once_when_the_system_role_is_rejected(
 
     assert response.choices[0].message.content == "ok"
     assert response.call_stats.cost_usd == 0.0
+    assert response.call_stats.system_role_mode == "folded"
+    assert cached.call_stats.system_role_mode == "folded"
     assert seen == [["system", "user"], ["user"], ["user"]]
     assert cached.call_stats.model == "m"
+    clear_system_role_cache()
+
+
+def test_unrelated_system_error_does_not_fold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clear_system_role_cache()
+    limiter = _limiter(tmp_path / "quota.json", FakeClock(), rpm=100, tpm=100_000, rpd=100)
+    seen: list[list[str]] = []
+
+    def completion(**kwargs: object) -> ModelResponse:
+        messages = kwargs["messages"]
+        assert isinstance(messages, list)
+        seen.append([str(message["role"]) for message in messages])
+        raise RuntimeError("the system is overloaded")
+
+    monkeypatch.setattr(llm_module, "get_rate_limiter", lambda: limiter)
+    monkeypatch.setattr(
+        llm_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            vertexai_project="",
+            vertexai_location="",
+            target_model="m",
+            gemini_api_key=None,
+            system_as_user=None,
+        ),
+    )
+    monkeypatch.setattr(llm_module.litellm, "completion", completion)
+    monkeypatch.setattr(llm_module.litellm, "token_counter", lambda **_kwargs: 4)
+
+    messages = [
+        {"role": "system", "content": "Be careful."},
+        {"role": "user", "content": "Hi"},
+    ]
+    with pytest.raises(RuntimeError, match="overloaded"):
+        llm_module.chat(messages, model="m")
+    assert seen == [["system", "user"]]
     clear_system_role_cache()

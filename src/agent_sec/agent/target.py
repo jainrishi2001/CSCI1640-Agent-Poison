@@ -8,6 +8,7 @@ later conversation loop can invoke it once per attacker message.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -121,7 +122,8 @@ class TargetAgent:
         steps = 0
         for index in range(self.max_steps):
             steps = index + 1
-            response = self.llm_fn(
+            response = await asyncio.to_thread(
+                self.llm_fn,
                 messages=working,
                 tools=openai_tools or None,
                 model=self.model,
@@ -193,6 +195,15 @@ class TargetAgent:
         usage_tokens: int,
     ) -> None:
         stats = getattr(response, "call_stats", None)
+        mode = getattr(stats, "system_role_mode", None)
+        if mode not in {"system", "folded"}:
+            mode = "system"
+        self.logger.log(
+            run_id,
+            "target",
+            "system_role_mode",
+            {"step": step, "value": mode},
+        )
         self.logger.log(
             run_id,
             "target",
