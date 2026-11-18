@@ -1,0 +1,10 @@
+.venv/
+.env
+runs/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.ipynb_checkpoints
+.ipynb_checkpoints/
+attacks/mcptox_subset/raw/
+decisions.md

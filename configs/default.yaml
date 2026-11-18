@@ -1,0 +1,17 @@
+attacks:
+  - none
+  - mcptox_subset
+  - pretext
+  - chained
+defenses:
+  - none
+  - hardened_prompt
+  - signed_manifests
+  - capability_tokens
+  - monitor
+seeds:
+  - 0
+  - 1
+  - 2
+max_steps: 8
+max_turns: 6
