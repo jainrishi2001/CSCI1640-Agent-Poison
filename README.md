@@ -2,26 +2,33 @@
 
 A sandboxed testbed for LLM agent security. A target agent calls simulated MCP tools. Attacks are poisoned tool descriptions and multi-turn social engineering. Tool calls and outgoing messages go through a policy gateway where defenses plug in. Nothing here touches a real system or sends a real message.
 
+## What this project is
+
+We attack an AI agent through two doors, **poisoned tool descriptions** and **social-engineering conversations** (plus a chained attack using both), and measure which defenses hold: a hardened prompt, signed tool manifests, capability tokens, and a monitor agent.
+
+- **Start with [`docs/`](docs/README.md):** [solution architecture](docs/architecture/solution.md) (what and why), [technical architecture](docs/architecture/technical.md) (how), [roadmap](docs/roadmap.md), [decision log](docs/decision-log.md).
+- **Work is tracked as GitHub issues** generated from [`docs/backlog.yaml`](docs/backlog.yaml).
+
 ## Prerequisites
 
 - [uv](https://docs.astral.sh/uv/)
-- The [gcloud CLI](https://cloud.google.com/sdk/docs/install)
-- Application Default Credentials: `gcloud auth application-default login`
-- The Vertex AI API enabled on the Google Cloud project named in `.env`
+- A **Google AI Studio API key** on the free tier (aistudio.google.com, "Get API key", in a project with **no billing account**). No Google Cloud billing or gcloud login is needed.
+- Optional: the GitHub CLI (`gh`) to create issues from the backlog.
 
-Offline tests do not need cloud credentials. `make smoke` does.
+Offline tests need no key. `make smoke` and `make demo` call the real model.
 
 ## Quickstart
 
 ```bash
 make setup
 cp .env.example .env
-# Fill in VERTEXAI_PROJECT and the three model ids. Do not hardcode models in code.
-make test
-make smoke
+# Set GEMINI_API_KEY and keep the model ids from .env.example. Add SYSTEM_AS_USER=false.
+make test     # offline, free
+make smoke    # 1 model call: checks tool calling
+make demo     # ~3 model calls: one real task end to end
 ```
 
-Model ids are LiteLLM strings such as `vertex_ai/<model-name>`. `GEMINI_API_KEY` is optional and is only for free-tier debugging with the `gemini/` prefix.
+Models (free tier): target `gemini/gemma-4-31b-it`, attacker `gemini/gemma-4-26b-a4b-it`, monitor `gemini/gemini-3.1-flash-lite`. Limits live in `configs/limits.yaml`; the code waits and retries automatically and stops cleanly at the daily quota. Never hardcode model ids.
 
 ## Layout
 
@@ -63,10 +70,15 @@ agent-sec/
     default.yaml         placeholder experiment grid
   scripts/
     smoke_llm.py         one dummy tool call against TARGET_MODEL
+    demo_task.py         one real task end to end
+    create_issues.py     GitHub issues from docs/backlog.yaml
   tests/
   analysis/
   paper/game.md
+  docs/                architecture, roadmap, decisions, backlog, Cursor prompts
   runs/                  gitignored JSONL output
 ```
 
-Signing, capability tokens, the settings and LLM wrappers, the run logger, and the benign MCP server are implemented. Agents, the gateway policy loop, the monitor, poisoned tools, and the experiment runner are stubs.
+## Status
+
+Built and tested: LLM wrapper with free-tier limits, target agent loop, policy gateway, secret store, benign tools, signing and capability-token primitives. Next: tool-poisoning attack and baseline (milestone M2). See [docs/roadmap.md](docs/roadmap.md).
