@@ -30,7 +30,7 @@ flowchart TB
     subgraph Servers["servers/ (in-memory FastMCP)"]
         B["benign.py ✅<br/>read_file, send_email,<br/>lookup_employee, fetch_url"]
         S["secret_store.py ✅<br/>get_access_code"]
-        P["poisoned.py ⬜<br/>poisoned / rug-pull tools"]
+        P["poisoned.py ✅<br/>poisoned / rug-pull tools"]
     end
 
     LLM["llm.py ✅<br/>chat(): LiteLLM + rate limiter<br/>+ quota + retries"]
@@ -70,12 +70,12 @@ flowchart TB
 | `src/agent_sec/gateway/prompts.py` | Base and hardened system prompts | ⬜ |
 | `src/agent_sec/servers/benign.py` | Fake office tools | ✅ (needs realistic data + factory) |
 | `src/agent_sec/servers/secret_store.py` | `generate_secret(seed)`, `make_secret_store(secret)` | ✅ |
-| `src/agent_sec/servers/poisoned.py` | Poisoned tool server factory, rug pull | ⬜ |
+| `src/agent_sec/servers/poisoned.py` | `load_cases` (validated case models), `make_tool_server` (fresh server per run, benign or poisoned variant), `manifest_for` (approved manifest for D2). Schema/output vectors: #28/#27 | ✅ (description vector) |
 | `src/agent_sec/eval/judge.py` | Scores runs from logs | ⬜ |
 | `src/agent_sec/eval/runner.py` | Grid runner with resume, concurrency, error capture | ⬜ |
-| `attacks/` | Attack data: door-1 cases, pretexts, chained scenarios | ⬜ placeholders |
+| `attacks/` | Attack data: `door1_cases.yaml` (30 cases: 8 each P1/P2/P3 + 6 rug pulls); pretexts and chained scenarios still placeholders | 🟡 door 1 done |
 | `configs/default.yaml` | Experiment grid | ⬜ placeholder |
-| `configs/limits.yaml` | Free-tier limits per model | ✅ |
+| `configs/limits.yaml` | Free-tier limits per model, plus self-imposed caps for the Vertex models | ✅ |
 | `scripts/smoke_llm.py`, `scripts/demo_task.py` | One-call smoke test; one real end-to-end task | ✅ |
 | `tests/` | Offline tests (no network, fake LLM) | ✅ 28+ tests |
 | `paper/game.md` | Security game write-up | ⬜ |

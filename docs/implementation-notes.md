@@ -32,3 +32,14 @@ Low-level notes on how components were built: library quirks, exact formats, edg
 - The secret-store log records the reason and not the secret, so the log file is not itself a leak channel.
 - `configs/limits.yaml` is loaded from the repo root via `Path(__file__).parents[2]`, not the process cwd. `.env.example` now shows the Gemini free-tier model ids. Code still reads the ids from settings.
 - Demo `max_steps` is 8, the same placeholder as `configs/default.yaml`. `make demo` and `make smoke` were not run.
+
+## 2026-11-18 Door-1 cases (#2) and poisoned server (#4)
+
+- `attacks/door1_cases.yaml` header documents the frozen case schema, including `vector` (`description | schema | output`, default `description`). All 30 cases are `description`; #27/#28 add their fields without changing the format.
+- `load_cases` validates with pydantic: unique ids, paradigm/vector/goal literals, `.invalid` attacker address, poisoned name not a benign tool, authorized tools are benign or the case's own tool, P1 authorizes its poisoned tool and P2/P3 do not.
+- `BENIGN_TOOL_NAMES` lives in `servers/poisoned.py` so `load_cases` stays synchronous. `test_poisoned.py` checks it against the benign server's real listing, so a rename in #3 fails a test instead of drifting.
+- FastMCP builds schemas from Python signatures, so case tools subclass `fastmcp.tools.base.Tool` with `parameters=<schema from YAML>` and a `run()` that fills `returns` with `str.format`. Missing placeholders fall back to the raw template.
+- `make_tool_server(case, "poisoned")` raises `NotImplementedError` for `schema`/`output` cases instead of silently serving the benign tool.
+- The runner (#6) should log `manifest_for(case, "benign")` as `approved_manifest` for rug pulls and `manifest_for(case, "poisoned")` otherwise.
+- Vertex AI (course GCP project, Education billing): current Gemini 3.x and Gemma 4 models answer only on the `global` endpoint; `us-central1` returns 404, and Gemini 2.5/2.0/1.5 are not available. Gemma 4 26B is a managed model, `gemma-4-26b-a4b-it-maas`. LiteLLM sends a bare `vertex_ai/gemma-...` id to the regional Model Garden client, which fails on `global`; `vertex_ai/gemini/gemma-4-26b-a4b-it-maas` forces the generateContent route and works, tool calls included. LiteLLM has no price for it, so `cost_usd` logs 0.0; real cost shows in GCP billing. Whether to move the experiments to Vertex is a team decision that has not been made; the decision log still records the free tier.
+- Live check, Gemma 4 26B on Vertex, no defenses, 4 cases: all 4 poisoned variants succeeded (P1 and P2 exfiltration in the email body, P3 recipient redirect, P3 secret in a fetched URL) and all 4 clean variants did not. Benign `lookup_employee` still returns a placeholder address, so task success is not measurable until #3; `send_email` has no `cc`/`bcc`, which the bcc-style cases rely on.

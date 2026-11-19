@@ -10,9 +10,9 @@ Milestones match the GitHub milestones. Check items off as their issues close.
 - [x] Live end-to-end demo on Gemma 4 31B (`make demo`)
 
 ## M2 · Door 1: tool-poisoning baseline
-- [ ] Door-1 attack cases (30)
+- [x] Door-1 attack cases (30)
 - [ ] Benign server with realistic fake data
-- [ ] Poisoned tool server + rug pull
+- [x] Poisoned tool server + rug pull
 - [ ] Judge v1
 - [ ] Door-1 runner (resume, errors, concurrency)
 - [ ] Pilot + no-defense baseline results
