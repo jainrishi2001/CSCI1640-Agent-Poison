@@ -13,7 +13,9 @@ We attack an AI agent through two doors, **poisoned tool descriptions** and **so
 ## Prerequisites
 
 - [uv](https://docs.astral.sh/uv/)
-- A **Google AI Studio API key** on the free tier (aistudio.google.com, "Get API key", in a project with **no billing account**). No Google Cloud billing or gcloud login is needed.
+- One of two model providers (pick per role; see `.env.example`):
+  - **Google AI Studio, free tier (default):** an API key from aistudio.google.com ("Get API key"), in a project with **no billing account**. No Google Cloud billing or gcloud login is needed. Costs $0.
+  - **Vertex AI (optional):** a GCP project with the Vertex AI API enabled and `gcloud auth application-default login`. Calls are **billed**. Current models are served only from the `global` location, and the Gemma 4 model offered there is 26B, not 31B.
 
 Offline tests need no key. `make smoke` and `make demo` call the real model.
 
@@ -22,13 +24,13 @@ Offline tests need no key. `make smoke` and `make demo` call the real model.
 ```bash
 make setup
 cp .env.example .env
-# Set GEMINI_API_KEY and keep the model ids from .env.example. Add SYSTEM_AS_USER=false.
+# Option A: set GEMINI_API_KEY. Option B: uncomment the Vertex block and set VERTEXAI_PROJECT.
 make test     # offline, free
 make smoke    # 1 model call: checks tool calling
 make demo     # ~3 model calls: one real task end to end
 ```
 
-Models (free tier): target `gemini/gemma-4-31b-it`, attacker `gemini/gemma-4-26b-a4b-it`, monitor `gemini/gemini-3.1-flash-lite`. Limits live in `configs/limits.yaml`; the code waits and retries automatically and stops cleanly at the daily quota. Never hardcode model ids.
+Models, AI Studio (default): target `gemini/gemma-4-31b-it`, attacker `gemini/gemma-4-26b-a4b-it`, monitor `gemini/gemini-3.1-flash-lite`. Vertex alternative: target `vertex_ai/gemini/gemma-4-26b-a4b-it-maas`, attacker and monitor `vertex_ai/gemini-3.1-flash-lite`. The id prefix picks the provider, and roles can mix providers, so results can be compared across models. Limits live in `configs/limits.yaml` (free-tier limits, plus self-imposed caps on the billed Vertex models); the code waits and retries automatically and stops cleanly at the daily quota. Never hardcode model ids.
 
 ## Layout
 
