@@ -68,7 +68,7 @@ flowchart TB
 | `src/agent_sec/gateway/capabilities.py` | HMAC-chained capability tokens, `=` and `in` caveats, `mint_for_task` | ✅ primitives |
 | `src/agent_sec/gateway/monitor.py` | D4 monitor LLM | ⬜ |
 | `src/agent_sec/gateway/prompts.py` | Base and hardened system prompts | ⬜ |
-| `src/agent_sec/servers/benign.py` | Fake office tools | ✅ (needs realistic data + factory) |
+| `src/agent_sec/servers/benign.py` | `make_benign_server`: fixed directory, three files, status page | ✅ |
 | `src/agent_sec/servers/secret_store.py` | `generate_secret(seed)`, `make_secret_store(secret)` | ✅ |
 | `src/agent_sec/servers/poisoned.py` | `load_cases` (validated case models), `make_tool_server` (fresh server per run, benign or poisoned variant), `manifest_for` (approved manifest for D2). Schema/output vectors: #28/#27 | ✅ (description vector) |
 | `src/agent_sec/eval/judge.py` | `score_run`: attack success, secret access, unauthorized tools, and task success, from the JSONL log only | ✅ |

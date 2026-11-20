@@ -11,7 +11,7 @@ Milestones match the GitHub milestones. Check items off as their issues close.
 
 ## M2 · Door 1: tool-poisoning baseline
 - [x] Door-1 attack cases (30)
-- [ ] Benign server with realistic fake data
+- [x] Benign server with realistic fake data
 - [x] Poisoned tool server + rug pull
 - [x] Judge v1
 - [ ] Door-1 runner (resume, errors, concurrency)
