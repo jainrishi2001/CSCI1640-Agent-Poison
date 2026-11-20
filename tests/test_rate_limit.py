@@ -81,14 +81,26 @@ def test_rpm_window_blocks_then_releases(tmp_path: Path) -> None:
 def test_tpm_window_blocks_then_releases(tmp_path: Path) -> None:
     clock = FakeClock()
     limiter = _limiter(tmp_path / "quota.json", clock, rpm=100, tpm=100, rpd=100)
-    limiter.before_call("m", 70)
-    limiter.after_call("m", 70)
+    first = limiter.before_call("m", 70)
+    limiter.after_call("m", first.id, 70)
     limiter.before_call("m", 40)
     assert clock.t == 1_700_000_000.0 + 60
 
     held = clock.t
     limiter.before_call("m", 40)
     assert clock.t == held
+
+
+def test_overlapping_calls_update_their_own_reservations(tmp_path: Path) -> None:
+    clock = FakeClock()
+    limiter = _limiter(tmp_path / "quota.json", clock, rpm=10, tpm=100, rpd=100)
+    first = limiter.before_call("m", 40)
+    second = limiter.before_call("m", 40)
+    limiter.after_call("m", first.id, 90)
+    limiter.after_call("m", second.id, 5)
+
+    limiter.before_call("m", 10)
+    assert clock.t == 1_700_000_000.0 + 60
 
 
 def test_daily_quota_raises_at_the_margin_and_survives_reload(tmp_path: Path) -> None:

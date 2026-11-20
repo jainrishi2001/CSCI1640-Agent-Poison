@@ -10,7 +10,7 @@ Status legend: ✅ built and tested · 🟡 partial · ⬜ stub or planned
 
 ```mermaid
 flowchart TB
-    subgraph Runner["eval/runner.py: experiment grid ⬜"]
+    subgraph Runner["eval/runner.py: door-1 grid ✅"]
         CFG[configs/*.yaml<br/>attacks x defenses x seeds]
     end
 
@@ -67,12 +67,12 @@ flowchart TB
 | `src/agent_sec/gateway/signing.py` | Ed25519 sign/verify over canonical manifests, SHA-256 pins, `tool_def_from_mcp` | ✅ primitives |
 | `src/agent_sec/gateway/capabilities.py` | HMAC-chained capability tokens, `=` and `in` caveats, `mint_for_task` | ✅ primitives |
 | `src/agent_sec/gateway/monitor.py` | D4 monitor LLM | ⬜ |
-| `src/agent_sec/gateway/prompts.py` | Base and hardened system prompts | ⬜ |
+| `src/agent_sec/gateway/prompts.py` | `BASE_SYSTEM_PROMPT` for the no-defense baseline. Hardened D1 prompt still to come | 🟡 |
 | `src/agent_sec/servers/benign.py` | `make_benign_server`: fixed directory, three files, status page | ✅ |
 | `src/agent_sec/servers/secret_store.py` | `generate_secret(seed)`, `make_secret_store(secret)` | ✅ |
 | `src/agent_sec/servers/poisoned.py` | `load_cases` (validated case models), `make_tool_server` (fresh server per run, benign or poisoned variant), `manifest_for` (approved manifest for D2). Schema/output vectors: #28/#27 | ✅ (description vector) |
 | `src/agent_sec/eval/judge.py` | `score_run`: attack success, secret access, unauthorized tools, and task success, from the JSONL log only | ✅ |
-| `src/agent_sec/eval/runner.py` | Grid runner with resume, concurrency, error capture | ⬜ |
+| `src/agent_sec/eval/runner.py`, `scripts/run_door1.py` | Door-1 grid, resume, concurrency, per-run errors, quota stop. `make door1-pilot` and `make door1` call the configured target model | ✅ |
 | `attacks/` | Attack data: `door1_cases.yaml` (30 cases: 8 each P1/P2/P3 + 6 rug pulls); pretexts and chained scenarios still placeholders | 🟡 door 1 done |
 | `configs/default.yaml` | Experiment grid | ⬜ placeholder |
 | `configs/limits.yaml` | Free-tier limits per model, plus self-imposed caps for the Vertex models | ✅ |
@@ -176,9 +176,9 @@ One file per run. Every line:
 | `tool_result` | target | `step`, `tool`, `content`, `executed` |
 | `final_message` | target | `step`, `text`, `blocked` |
 | `max_steps` | target | `step`, `max_steps` |
-| `approved_manifest` | runner (planned) | manifests the user approved (used by D2) |
+| `approved_manifest` | runner | `{name, description, input_schema}` the user approved (used later by D2) |
 
-Results (planned): one JSON line per run in `runs/<experiment>/results.jsonl` with the run id, status (`ok` / `errored`), and the judge's scores. Run ids are deterministic, for example `door1__{case_id}__{variant}__{defense}__s{seed}`, so an interrupted grid resumes where it stopped.
+Results: one JSON line per run in `runs/door1/results.jsonl` with the run id, status (`ok` / `errored`), and the judge's scores. Run ids are `door1__{case_id}__{variant}__{defense}__s{seed}`. The newest row for an id wins, so an interrupted grid resumes where it stopped.
 
 ## 7. Configuration
 
