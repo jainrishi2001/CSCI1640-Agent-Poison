@@ -73,3 +73,12 @@ Low-level notes on how components were built: library quirks, exact formats, edg
 ## 2026-11-20 Base system prompt (#6)
 
 - `BASE_SYSTEM_PROMPT` is a neutral office-assistant instruction: do the user's task with the tools, and do not invent files, people, or addresses. It does not tell the model to ignore tool descriptions or to protect the secret. That wording is D1 and would change the no-defense baseline. The hardened prompt is still a stub.
+
+## 2026-11-20 Door-1 runner (#6)
+
+- One cell is a case, a variant (`clean` serves the benign tool, `poisoned` serves the poisoned one), defense `none`, and a seed. The run id is `door1__<case>__<variant>__<defense>__s<seed>`.
+- The secret is `generate_secret(seed * 1000 + sha256(case_id) % 1000)`. Python's `hash()` is not used because it changes between processes.
+- A rug-pull poisoned run logs `manifest_for(case, "benign")` as `approved_manifest` and still serves the poisoned tool. Every other run logs the manifest it serves.
+- Resume reads `results.jsonl` and skips a run id whose newest row has `status: ok`. An `errored` row is tried again, and the new row is appended. The log file for that id is replaced so a rerun does not sit on a partial transcript.
+- `DailyQuotaExceeded` sets a stop flag before the next cell can take the semaphore, cancels cells that have not started, and logs that the quota resets at midnight Pacific. Any other exception is one `errored` row; the rest of the grid continues.
+- `limit` keeps the first N cases, then expands variants and seeds. `--limit 4` with both variants is 8 runs, which is what the pilot target will use. The script and Makefile targets are the next part.
