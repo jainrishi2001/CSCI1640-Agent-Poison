@@ -175,6 +175,14 @@ def pacific_date(timestamp: float) -> str:
     return datetime.fromtimestamp(timestamp, _PACIFIC).date().isoformat()
 
 
+@dataclass(frozen=True)
+class Reservation:
+    """One admitted call. ``id`` is stable even if later calls are reserved."""
+
+    id: int
+    waited_s: float
+
+
 class RateLimiter:
     """Per-model minute window plus a persisted Pacific-date request counter.
 
@@ -189,15 +197,18 @@ class RateLimiter:
         self.clock = clock
         self.quota_path = quota_path
         self._lock = threading.Lock()
+        self._next_reservation_id = 0
         self._requests: dict[str, list[float]] = {}
-        self._tokens: dict[str, list[tuple[float, int]]] = {}
+        self._tokens: dict[str, list[tuple[float, int, int]]] = {}
 
-    def before_call(self, model: str, estimated_tokens: int) -> float:
+    def before_call(self, model: str, estimated_tokens: int) -> Reservation:
         """Wait until the minute window can hold this call, then reserve it.
 
-        Returns how long the clock was asked to sleep. Raises
-        :class:`DailyQuotaExceeded` before waiting when the daily budget is
-        already spent, so a run stops instead of blocking until midnight.
+        The returned reservation names this call. ``after_call`` updates that
+        reservation, so two overlapping calls do not overwrite each other.
+        Raises :class:`DailyQuotaExceeded` before waiting when the daily
+        budget is already spent, so a run stops instead of blocking until
+        midnight.
         """
         limits = self._limits(model)
         rpm_budget = limits.rpm * self.config.safety_margin
@@ -210,23 +221,26 @@ class RateLimiter:
                 now = self.clock.now()
                 self._raise_if_daily_spent(model, now, limits)
                 if self._fits(model, now, estimated_tokens, rpm_budget, tpm_budget):
-                    self._reserve(model, now, estimated_tokens)
+                    reservation_id = self._reserve(model, now, estimated_tokens)
                     self._increment_daily(model, now)
-                    return waited
+                    return Reservation(reservation_id, waited)
                 delay = self._delay_until_fit(model, now, estimated_tokens, rpm_budget, tpm_budget)
             if delay <= 0:
                 raise TokenEstimateExceedsWindow(model, estimated_tokens, tpm_budget)
             self.clock.sleep(delay)
             waited += delay
 
-    def after_call(self, model: str, actual_tokens: int) -> None:
-        """Replace the reserved estimate for the latest call with actual usage."""
+    def after_call(self, model: str, reservation_id: int, actual_tokens: int) -> None:
+        """Replace the reserved estimate for ``reservation_id`` with actual usage."""
+        actual = max(0, int(actual_tokens))
         with self._lock:
             events = self._tokens.get(model)
             if not events:
                 return
-            stamp, _estimated = events[-1]
-            events[-1] = (stamp, max(0, int(actual_tokens)))
+            for index, (stamp, _estimated, event_id) in enumerate(events):
+                if event_id == reservation_id:
+                    events[index] = (stamp, actual, event_id)
+                    return
 
     def _limits(self, model: str) -> ModelLimits:
         try:
@@ -255,7 +269,9 @@ class RateLimiter:
         tpm_budget: float,
     ) -> float:
         expiries = [stamp + _WINDOW_SECONDS for stamp in self._requests.get(model, ())]
-        expiries.extend(stamp + _WINDOW_SECONDS for stamp, _tokens in self._tokens.get(model, ()))
+        expiries.extend(
+            stamp + _WINDOW_SECONDS for stamp, _tokens, _event_id in self._tokens.get(model, ())
+        )
         for expiry in sorted(expiries):
             if expiry <= now:
                 continue
@@ -269,11 +285,16 @@ class RateLimiter:
 
     def _live_tokens(self, model: str, now: float) -> int:
         cutoff = now - _WINDOW_SECONDS
-        return sum(tokens for stamp, tokens in self._tokens.get(model, ()) if stamp > cutoff)
+        return sum(
+            tokens for stamp, tokens, _event_id in self._tokens.get(model, ()) if stamp > cutoff
+        )
 
-    def _reserve(self, model: str, now: float, estimated_tokens: int) -> None:
+    def _reserve(self, model: str, now: float, estimated_tokens: int) -> int:
+        self._next_reservation_id += 1
+        reservation_id = self._next_reservation_id
         self._requests.setdefault(model, []).append(now)
-        self._tokens.setdefault(model, []).append((now, estimated_tokens))
+        self._tokens.setdefault(model, []).append((now, estimated_tokens, reservation_id))
+        return reservation_id
 
     def _raise_if_daily_spent(self, model: str, now: float, limits: ModelLimits) -> None:
         day = pacific_date(now)
@@ -468,14 +489,15 @@ def _send_once(
     call_kwargs: dict[str, Any],
     limiter: RateLimiter,
     limiter_waits: list[float],
-) -> tuple[ModelResponse, float]:
-    limiter_waits.append(limiter.before_call(model, estimated_tokens))
+) -> tuple[ModelResponse, float, int]:
+    reservation = limiter.before_call(model, estimated_tokens)
+    limiter_waits.append(reservation.waited_s)
     started = time.perf_counter()
     response = litellm.completion(**call_kwargs)
     latency_s = time.perf_counter() - started
     if not isinstance(response, ModelResponse):
         raise TypeError(f"expected a ModelResponse, got {type(response).__name__}")
-    return response, latency_s
+    return response, latency_s, reservation.id
 
 
 def _invoke(
@@ -509,7 +531,9 @@ def _invoke(
     overload_attempt = 0
     while True:
         try:
-            response, latency_s = _send_once(model, estimated, call_kwargs, limiter, limiter_waits)
+            response, latency_s, reservation_id = _send_once(
+                model, estimated, call_kwargs, limiter, limiter_waits
+            )
         except RateLimitError as exc:
             rate_attempt += 1
             if rate_attempt >= _RATE_LIMIT_ATTEMPTS:
@@ -543,7 +567,7 @@ def _invoke(
             overload_wait += delay
             continue
         actual = _total_tokens(response, estimated)
-        limiter.after_call(model, actual)
+        limiter.after_call(model, reservation_id, actual)
         waited = sum(limiter_waits) + rate_limit_wait + overload_wait
         return response, latency_s, waited
 
