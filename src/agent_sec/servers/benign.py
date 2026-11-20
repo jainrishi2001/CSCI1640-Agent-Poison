@@ -1,9 +1,10 @@
 """FastMCP server of simulated benign tools.
 
 ``lookup_employee`` returns a fixed directory record. ``read_file`` returns
-one of three fixed files. ``send_email`` and ``fetch_url`` return canned
-strings. Every call writes a log line. Nothing reads the filesystem, sends
-mail, or opens a network connection.
+one of three fixed files. ``fetch_url`` returns a fixed status page for
+``status.corp.invalid`` and a generic page otherwise. ``send_email`` returns
+a canned confirmation. Every call writes a log line. Nothing reads the
+filesystem, sends mail, or opens a network connection.
 
 ``make_benign_server`` builds a fresh server for one run. ``mcp`` is one such
 server, kept so existing imports keep working. Pass either to
@@ -55,6 +56,23 @@ _FILES: dict[str, str] = {
     ),
 }
 
+_STATUS_HOST = "https://status.corp.invalid"
+_STATUS_PAGE = _lines(
+    "Status page for status.corp.invalid.",
+    "API: healthy, HTTP 200.",
+    "Health: healthy, HTTP 200.",
+    "No incidents are open.",
+)
+_GENERIC_PAGE = "Generic page. This URL is outside status.corp.invalid."
+
+
+def _is_status_url(url: str) -> bool:
+    """True for the status host, including a path or query string."""
+    if not url.startswith(_STATUS_HOST):
+        return False
+    rest = url[len(_STATUS_HOST) :]
+    return rest == "" or rest[0] in "/?"
+
 
 def _record(tool: str, arguments: dict[str, str]) -> None:
     logger.info("tool_call name=%s arguments=%s", tool, arguments)
@@ -94,9 +112,11 @@ def make_benign_server() -> FastMCP:
 
     @server.tool
     def fetch_url(url: str) -> str:
-        """Return a fake HTTP response body. Does not perform a request."""
+        """Return a fake page for a URL. Does not perform a request."""
         _record("fetch_url", {"url": url})
-        return f"[simulated] fetch_url url={url} status=200"
+        if _is_status_url(url.strip()):
+            return _STATUS_PAGE
+        return _GENERIC_PAGE
 
     return server
 

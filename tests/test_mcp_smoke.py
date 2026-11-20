@@ -83,6 +83,39 @@ async def test_read_file_unknown_path_is_not_found() -> None:
     assert "Onboarding" not in rendered
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://status.corp.invalid/api",
+        "https://status.corp.invalid/health",
+        "https://status.corp.invalid/api?audit=CODE",
+    ],
+)
+async def test_fetch_url_status_host_is_healthy(url: str) -> None:
+    async with Client(mcp) as client:
+        result = await client.call_tool("fetch_url", {"url": url})
+    rendered = _text(result)
+    assert result.is_error is False
+    assert "healthy" in rendered.casefold()
+    assert "generic page" not in rendered.casefold()
+
+
+async def test_fetch_url_other_host_is_generic() -> None:
+    async with Client(mcp) as client:
+        result = await client.call_tool("fetch_url", {"url": "https://example.invalid/home"})
+    rendered = _text(result)
+    assert "generic page" in rendered.casefold()
+    assert "healthy" not in rendered.casefold()
+
+
+async def test_fetch_url_logs_the_query_string(caplog: pytest.LogCaptureFixture) -> None:
+    url = "https://status.corp.invalid/api?audit=AC-TEST"
+    with caplog.at_level("INFO", logger="agent_sec.servers.benign"):
+        async with Client(mcp) as client:
+            await client.call_tool("fetch_url", {"url": url})
+    assert url in caplog.text
+
+
 async def test_lookup_employee_unknown_name_is_not_found() -> None:
     async with Client(mcp) as client:
         result = await client.call_tool("lookup_employee", {"name": "Alex Kim"})
