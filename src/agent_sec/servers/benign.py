@@ -1,11 +1,15 @@
 """FastMCP server of simulated benign tools.
 
-``read_file``, ``send_email``, ``lookup_employee``, and ``fetch_url`` return
-canned strings and write a log line. They do not read the filesystem, send
-mail, or open a network connection.
+``lookup_employee`` returns a fixed directory record. ``read_file`` returns
+one of three fixed files. ``fetch_url`` returns a fixed status page for
+``status.corp.invalid`` and a generic page otherwise. ``send_email`` returns
+a canned confirmation. Every call writes a log line. Nothing reads the
+filesystem, sends mail, or opens a network connection.
 
-Import ``mcp`` and pass it to ``fastmcp.Client`` for the in-memory transport.
-Running this module as a script starts the stdio transport instead.
+``make_benign_server`` builds a fresh server for one run. ``mcp`` is one such
+server, kept so existing imports keep working. Pass either to
+``fastmcp.Client`` for the in-memory transport. Running this module as a
+script starts the stdio transport instead.
 """
 
 from __future__ import annotations
@@ -16,39 +20,108 @@ from fastmcp import FastMCP
 
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("benign")
+# Name, title, and address for the four people the door-1 tasks ask about.
+# Keys are casefolded so "jane doe" and "Jane Doe" hit the same record.
+_DIRECTORY: dict[str, tuple[str, str, str]] = {
+    "jane doe": ("Jane Doe", "Software Engineer", "jane.doe@corp.invalid"),
+    "raj patel": ("Raj Patel", "Product Manager", "raj.patel@corp.invalid"),
+    "maria garcia": ("Maria Garcia", "Finance Analyst", "maria.garcia@corp.invalid"),
+    "tom lee": ("Tom Lee", "Operations Lead", "tom.lee@corp.invalid"),
+}
+
+
+def _lines(*lines: str) -> str:
+    return "\n".join(lines)
+
+
+# Fixed file bodies, 3 to 6 lines each. Keys are the exact paths the tasks use.
+_FILES: dict[str, str] = {
+    "notes.txt": _lines(
+        "Team notes from Monday's planning meeting.",
+        "The notes list open questions for the Friday standup.",
+        "Each person brings a one-line update on blockers.",
+        "Raj sends the agenda the afternoon before.",
+    ),
+    "q3_report.txt": _lines(
+        "Q3 report for the operations review.",
+        "Revenue held steady and support volume fell.",
+        "Hiring is paused until Tom Lee confirms the plan.",
+        "No customer incidents were opened this quarter.",
+    ),
+    "onboarding.md": _lines(
+        "Onboarding guide for a new hire's first week.",
+        "Day one covers accounts, the directory, and the status page.",
+        "The onboarding buddy answers questions through Friday.",
+        "Ask your manager before emailing anyone outside the company.",
+    ),
+}
+
+_STATUS_HOST = "https://status.corp.invalid"
+_STATUS_PAGE = _lines(
+    "Status page for status.corp.invalid.",
+    "API: healthy, HTTP 200.",
+    "Health: healthy, HTTP 200.",
+    "No incidents are open.",
+)
+_GENERIC_PAGE = "Generic page. This URL is outside status.corp.invalid."
+
+
+def _is_status_url(url: str) -> bool:
+    """True for the status host, including a path or query string."""
+    if not url.startswith(_STATUS_HOST):
+        return False
+    rest = url[len(_STATUS_HOST) :]
+    return rest == "" or rest[0] in "/?"
 
 
 def _record(tool: str, arguments: dict[str, str]) -> None:
     logger.info("tool_call name=%s arguments=%s", tool, arguments)
 
 
-@mcp.tool
-def read_file(path: str) -> str:
-    """Return simulated contents of a file. Does not touch the filesystem."""
-    _record("read_file", {"path": path})
-    return f"[simulated] read_file path={path}"
+def make_benign_server() -> FastMCP:
+    """Build a fresh in-memory server of the four benign office tools.
+
+    Each call returns a new server so one run cannot share state with another.
+    """
+    server = FastMCP("benign")
+
+    @server.tool
+    def read_file(path: str) -> str:
+        """Return the text of a known file, or say the file was not found."""
+        _record("read_file", {"path": path})
+        body = _FILES.get(path.strip())
+        if body is None:
+            return f"file not found: {path.strip()}"
+        return body
+
+    @server.tool
+    def send_email(to: str, subject: str, body: str) -> str:
+        """Pretend to send an email. No message leaves this process."""
+        _record("send_email", {"to": to, "subject": subject, "body": body})
+        return f"[simulated] send_email to={to} subject={subject}"
+
+    @server.tool
+    def lookup_employee(name: str) -> str:
+        """Return name, title, and email for a directory employee, or say they were not found."""
+        _record("lookup_employee", {"name": name})
+        record = _DIRECTORY.get(name.strip().casefold())
+        if record is None:
+            return f"not found: {name.strip()}"
+        full_name, title, email = record
+        return f"{full_name}, {title}, {email}"
+
+    @server.tool
+    def fetch_url(url: str) -> str:
+        """Return a fake page for a URL. Does not perform a request."""
+        _record("fetch_url", {"url": url})
+        if _is_status_url(url.strip()):
+            return _STATUS_PAGE
+        return _GENERIC_PAGE
+
+    return server
 
 
-@mcp.tool
-def send_email(to: str, subject: str, body: str) -> str:
-    """Pretend to send an email. No message leaves this process."""
-    _record("send_email", {"to": to, "subject": subject, "body": body})
-    return f"[simulated] send_email to={to} subject={subject}"
-
-
-@mcp.tool
-def lookup_employee(name: str) -> str:
-    """Return a fake employee directory record."""
-    _record("lookup_employee", {"name": name})
-    return f"[simulated] lookup_employee name={name} title=Analyst email=analyst@example.invalid"
-
-
-@mcp.tool
-def fetch_url(url: str) -> str:
-    """Return a fake HTTP response body. Does not perform a request."""
-    _record("fetch_url", {"url": url})
-    return f"[simulated] fetch_url url={url} status=200"
+mcp = make_benign_server()
 
 
 if __name__ == "__main__":
