@@ -71,7 +71,7 @@ flowchart TB
 | `src/agent_sec/servers/benign.py` | Fake office tools | ✅ (needs realistic data + factory) |
 | `src/agent_sec/servers/secret_store.py` | `generate_secret(seed)`, `make_secret_store(secret)` | ✅ |
 | `src/agent_sec/servers/poisoned.py` | `load_cases` (validated case models), `make_tool_server` (fresh server per run, benign or poisoned variant), `manifest_for` (approved manifest for D2). Schema/output vectors: #28/#27 | ✅ (description vector) |
-| `src/agent_sec/eval/judge.py` | Scores runs from logs | ⬜ |
+| `src/agent_sec/eval/judge.py` | `score_run`: attack success, secret access, unauthorized tools, and task success, from the JSONL log only | ✅ |
 | `src/agent_sec/eval/runner.py` | Grid runner with resume, concurrency, error capture | ⬜ |
 | `attacks/` | Attack data: `door1_cases.yaml` (30 cases: 8 each P1/P2/P3 + 6 rug pulls); pretexts and chained scenarios still placeholders | 🟡 door 1 done |
 | `configs/default.yaml` | Experiment grid | ⬜ placeholder |
