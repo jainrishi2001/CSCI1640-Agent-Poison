@@ -14,7 +14,7 @@ Milestones match the GitHub milestones. Check items off as their issues close.
 - [x] Benign server with realistic fake data
 - [x] Poisoned tool server + rug pull
 - [x] Judge v1
-- [ ] Door-1 runner (resume, errors, concurrency)
+- [x] Door-1 runner (resume, errors, concurrency)
 - [ ] Pilot + no-defense baseline results
 
 ## M3 · Door 2 and chained attacks

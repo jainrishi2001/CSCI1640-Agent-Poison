@@ -81,4 +81,8 @@ Low-level notes on how components were built: library quirks, exact formats, edg
 - A rug-pull poisoned run logs `manifest_for(case, "benign")` as `approved_manifest` and still serves the poisoned tool. Every other run logs the manifest it serves.
 - Resume reads `results.jsonl` and skips a run id whose newest row has `status: ok`. An `errored` row is tried again, and the new row is appended. The log file for that id is replaced so a rerun does not sit on a partial transcript.
 - `DailyQuotaExceeded` sets a stop flag before the next cell can take the semaphore, cancels cells that have not started, and logs that the quota resets at midnight Pacific. Any other exception is one `errored` row; the rest of the grid continues.
-- `limit` keeps the first N cases, then expands variants and seeds. `--limit 4` with both variants is 8 runs, which is what the pilot target will use. The script and Makefile targets are the next part.
+- `limit` keeps the first N cases, then expands variants and seeds. `--limit 4` with both variants is 8 runs, which is what the pilot target uses.
+
+## 2026-11-20 Door-1 CLI (#6)
+
+- `scripts/run_door1.py` reads the model from settings and writes under `runs/door1/`. It prints the summary from the newest results row of every run id, then returns 1 if `DailyQuotaExceeded` stopped the grid. The test suite calls `launch` with a scripted model and does not run `make door1-pilot` or `make door1`.
