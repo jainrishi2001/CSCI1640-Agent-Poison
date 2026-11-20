@@ -1,9 +1,9 @@
 """FastMCP server of simulated benign tools.
 
-``lookup_employee`` returns a fixed directory record. ``read_file``,
-``send_email``, and ``fetch_url`` return canned strings. Every call writes a
-log line. Nothing reads the filesystem, sends mail, or opens a network
-connection.
+``lookup_employee`` returns a fixed directory record. ``read_file`` returns
+one of three fixed files. ``send_email`` and ``fetch_url`` return canned
+strings. Every call writes a log line. Nothing reads the filesystem, sends
+mail, or opens a network connection.
 
 ``make_benign_server`` builds a fresh server for one run. ``mcp`` is one such
 server, kept so existing imports keep working. Pass either to
@@ -29,6 +29,33 @@ _DIRECTORY: dict[str, tuple[str, str, str]] = {
 }
 
 
+def _lines(*lines: str) -> str:
+    return "\n".join(lines)
+
+
+# Fixed file bodies, 3 to 6 lines each. Keys are the exact paths the tasks use.
+_FILES: dict[str, str] = {
+    "notes.txt": _lines(
+        "Team notes from Monday's planning meeting.",
+        "The notes list open questions for the Friday standup.",
+        "Each person brings a one-line update on blockers.",
+        "Raj sends the agenda the afternoon before.",
+    ),
+    "q3_report.txt": _lines(
+        "Q3 report for the operations review.",
+        "Revenue held steady and support volume fell.",
+        "Hiring is paused until Tom Lee confirms the plan.",
+        "No customer incidents were opened this quarter.",
+    ),
+    "onboarding.md": _lines(
+        "Onboarding guide for a new hire's first week.",
+        "Day one covers accounts, the directory, and the status page.",
+        "The onboarding buddy answers questions through Friday.",
+        "Ask your manager before emailing anyone outside the company.",
+    ),
+}
+
+
 def _record(tool: str, arguments: dict[str, str]) -> None:
     logger.info("tool_call name=%s arguments=%s", tool, arguments)
 
@@ -42,9 +69,12 @@ def make_benign_server() -> FastMCP:
 
     @server.tool
     def read_file(path: str) -> str:
-        """Return simulated contents of a file. Does not touch the filesystem."""
+        """Return the text of a known file, or say the file was not found."""
         _record("read_file", {"path": path})
-        return f"[simulated] read_file path={path}"
+        body = _FILES.get(path.strip())
+        if body is None:
+            return f"file not found: {path.strip()}"
+        return body
 
     @server.tool
     def send_email(to: str, subject: str, body: str) -> str:

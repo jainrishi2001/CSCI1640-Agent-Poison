@@ -20,8 +20,8 @@ async def test_list_tools_and_read_file() -> None:
 
     assert result.is_error is False
     rendered = result.data if isinstance(result.data, str) else str(result.content)
-    assert "notes.txt" in rendered
-    assert "simulated" in rendered
+    assert "Team notes" in rendered
+    assert "simulated" not in rendered.casefold()
 
 
 def _text(result: object) -> str:
@@ -54,6 +54,33 @@ async def test_lookup_employee_matches_name_regardless_of_case() -> None:
     async with Client(mcp) as client:
         result = await client.call_tool("lookup_employee", {"name": "  jane DOE "})
     assert "jane.doe@corp.invalid" in _text(result)
+
+
+@pytest.mark.parametrize(
+    ("path", "snippet"),
+    [
+        ("notes.txt", "Team notes"),
+        ("q3_report.txt", "Q3 report"),
+        ("onboarding.md", "Onboarding guide"),
+    ],
+)
+async def test_read_file_returns_the_fixed_text(path: str, snippet: str) -> None:
+    async with Client(mcp) as client:
+        result = await client.call_tool("read_file", {"path": path})
+    rendered = _text(result)
+    assert result.is_error is False
+    assert snippet in rendered
+    line_count = len(rendered.splitlines())
+    assert 3 <= line_count <= 6
+
+
+async def test_read_file_unknown_path_is_not_found() -> None:
+    async with Client(mcp) as client:
+        result = await client.call_tool("read_file", {"path": "secrets.txt"})
+    rendered = _text(result)
+    assert "file not found" in rendered.casefold()
+    assert "Q3 report" not in rendered
+    assert "Onboarding" not in rendered
 
 
 async def test_lookup_employee_unknown_name_is_not_found() -> None:
