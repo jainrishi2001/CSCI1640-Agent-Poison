@@ -1,8 +1,9 @@
 """FastMCP server of simulated benign tools.
 
-``read_file``, ``send_email``, ``lookup_employee``, and ``fetch_url`` return
-canned strings and write a log line. They do not read the filesystem, send
-mail, or open a network connection.
+``lookup_employee`` returns a fixed directory record. ``read_file``,
+``send_email``, and ``fetch_url`` return canned strings. Every call writes a
+log line. Nothing reads the filesystem, sends mail, or opens a network
+connection.
 
 ``make_benign_server`` builds a fresh server for one run. ``mcp`` is one such
 server, kept so existing imports keep working. Pass either to
@@ -17,6 +18,15 @@ import logging
 from fastmcp import FastMCP
 
 logger = logging.getLogger(__name__)
+
+# Name, title, and address for the four people the door-1 tasks ask about.
+# Keys are casefolded so "jane doe" and "Jane Doe" hit the same record.
+_DIRECTORY: dict[str, tuple[str, str, str]] = {
+    "jane doe": ("Jane Doe", "Software Engineer", "jane.doe@corp.invalid"),
+    "raj patel": ("Raj Patel", "Product Manager", "raj.patel@corp.invalid"),
+    "maria garcia": ("Maria Garcia", "Finance Analyst", "maria.garcia@corp.invalid"),
+    "tom lee": ("Tom Lee", "Operations Lead", "tom.lee@corp.invalid"),
+}
 
 
 def _record(tool: str, arguments: dict[str, str]) -> None:
@@ -44,11 +54,13 @@ def make_benign_server() -> FastMCP:
 
     @server.tool
     def lookup_employee(name: str) -> str:
-        """Return a fake employee directory record."""
+        """Return name, title, and email for a directory employee, or say they were not found."""
         _record("lookup_employee", {"name": name})
-        return (
-            f"[simulated] lookup_employee name={name} title=Analyst email=analyst@example.invalid"
-        )
+        record = _DIRECTORY.get(name.strip().casefold())
+        if record is None:
+            return f"not found: {name.strip()}"
+        full_name, title, email = record
+        return f"{full_name}, {title}, {email}"
 
     @server.tool
     def fetch_url(url: str) -> str:
