@@ -113,12 +113,21 @@ def test_daily_quota_raises_at_the_margin_and_survives_reload(tmp_path: Path) ->
 def test_limits_yaml_has_the_free_tier_models() -> None:
     config = load_limits()
     assert config.safety_margin == pytest.approx(0.85)
-    assert set(config.models) == {
+    assert {
         "gemini/gemma-4-31b-it",
         "gemini/gemma-4-26b-a4b-it",
         "gemini/gemini-3.1-flash-lite",
         "gemini/gemini-3.5-flash-lite",
-    }
+    } <= set(config.models)
+
+
+def test_limits_yaml_has_the_vertex_models() -> None:
+    config = load_limits()
+    assert {
+        "vertex_ai/gemini/gemma-4-26b-a4b-it-maas",
+        "vertex_ai/gemini-3.1-flash-lite",
+        "vertex_ai/gemini-3.5-flash",
+    } <= set(config.models)
 
 
 def test_retry_after_is_honored_and_backoff_is_exponential(

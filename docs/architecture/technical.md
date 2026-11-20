@@ -30,7 +30,7 @@ flowchart TB
     subgraph Servers["servers/ (in-memory FastMCP)"]
         B["benign.py ✅<br/>read_file, send_email,<br/>lookup_employee, fetch_url"]
         S["secret_store.py ✅<br/>get_access_code"]
-        P["poisoned.py ⬜<br/>poisoned / rug-pull tools"]
+        P["poisoned.py ✅<br/>poisoned / rug-pull tools"]
     end
 
     LLM["llm.py ✅<br/>chat(): LiteLLM + rate limiter<br/>+ quota + retries"]
@@ -70,12 +70,12 @@ flowchart TB
 | `src/agent_sec/gateway/prompts.py` | Base and hardened system prompts | ⬜ |
 | `src/agent_sec/servers/benign.py` | Fake office tools | ✅ (needs realistic data + factory) |
 | `src/agent_sec/servers/secret_store.py` | `generate_secret(seed)`, `make_secret_store(secret)` | ✅ |
-| `src/agent_sec/servers/poisoned.py` | Poisoned tool server factory, rug pull | ⬜ |
+| `src/agent_sec/servers/poisoned.py` | `load_cases` (validated case models), `make_tool_server` (fresh server per run, benign or poisoned variant), `manifest_for` (approved manifest for D2). Schema/output vectors: #28/#27 | ✅ (description vector) |
 | `src/agent_sec/eval/judge.py` | Scores runs from logs | ⬜ |
 | `src/agent_sec/eval/runner.py` | Grid runner with resume, concurrency, error capture | ⬜ |
-| `attacks/` | Attack data: door-1 cases, pretexts, chained scenarios | ⬜ placeholders |
+| `attacks/` | Attack data: `door1_cases.yaml` (30 cases: 8 each P1/P2/P3 + 6 rug pulls); pretexts and chained scenarios still placeholders | 🟡 door 1 done |
 | `configs/default.yaml` | Experiment grid | ⬜ placeholder |
-| `configs/limits.yaml` | Free-tier limits per model | ✅ |
+| `configs/limits.yaml` | Free-tier limits per model, plus self-imposed caps for the Vertex models | ✅ |
 | `scripts/smoke_llm.py`, `scripts/demo_task.py` | One-call smoke test; one real end-to-end task | ✅ |
 | `tests/` | Offline tests (no network, fake LLM) | ✅ 28+ tests |
 | `paper/game.md` | Security game write-up | ⬜ |
@@ -151,7 +151,9 @@ Known issue for D3: caveats are conjunctive, so a token minted with `allow_discl
 
 ## 5. LLM access, limits, and failure handling
 
-- **Provider:** Gemini API free tier through LiteLLM, model strings `gemini/<id>`, key in `GEMINI_API_KEY`. No billing account is linked, so nothing can be charged.
+- **Providers:** the model id prefix picks one per role, through LiteLLM.
+  - `gemini/<id>`: Google AI Studio free tier (default), key in `GEMINI_API_KEY`. No billing account is linked, so nothing can be charged.
+  - `vertex_ai/<id>`: Vertex AI on a GCP project, billed per call, authenticated with gcloud application-default credentials. Needs `VERTEXAI_PROJECT`; `llm.chat` raises a clear error without it. Current models answer only on `VERTEXAI_LOCATION=global`. Gemma 4 26B is `vertex_ai/gemini/gemma-4-26b-a4b-it-maas`; the `gemini/` segment keeps LiteLLM on the generateContent route. LiteLLM has no price for it, so `cost_usd` logs 0.0 and real cost appears in GCP billing.
 - **Per-model sliding window (60 s):** requests per minute and tokens per minute, both at 85% of the published limit (`configs/limits.yaml`). Prompt tokens are estimated before the call and replaced with actual usage afterwards.
 - **Daily quota:** counted in `runs/.quota.json` per model and Pacific date (free-tier limits reset at midnight Pacific). `DailyQuotaExceeded` stops a run cleanly. Run **one experiment process at a time**; the quota file is not shared safely across processes.
 - **Retries:** 429s honor retry-after or back off exponentially; 503 overloads and connection errors retry patiently (about 3 to 4 minutes total) with jitter.
@@ -182,13 +184,14 @@ Results (planned): one JSON line per run in `runs/<experiment>/results.jsonl` wi
 
 | Variable | Example | Notes |
 |---|---|---|
-| `GEMINI_API_KEY` | from aistudio.google.com | Use a key in a project **without** billing |
+| `GEMINI_API_KEY` | from aistudio.google.com | For `gemini/` ids. Use a key in a project **without** billing |
 | `TARGET_MODEL` | `gemini/gemma-4-31b-it` | |
 | `ATTACKER_MODEL` | `gemini/gemma-4-26b-a4b-it` | |
 | `MONITOR_MODEL` | `gemini/gemini-3.1-flash-lite` | |
 | `SYSTEM_AS_USER` | `false` | Pinned after checking Gemma accepts system prompts |
 | `RUNS_DIR` | `runs` | Gitignored |
-| `VERTEXAI_PROJECT`, `VERTEXAI_LOCATION` | | Required by config but unused on the free tier |
+| `VERTEXAI_PROJECT` | your GCP project id | Only for `vertex_ai/` ids; optional otherwise |
+| `VERTEXAI_LOCATION` | `global` (default) | `us-central1` returns 404 for current models |
 
 Never hardcode model ids. Use fixed version ids, not `-latest` aliases, so results are reproducible.
 

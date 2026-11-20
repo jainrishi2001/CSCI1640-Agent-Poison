@@ -607,6 +607,12 @@ def _build_call_kwargs_for_vertex(
 ) -> dict[str, Any]:
     merged = dict(extra)
     if model.startswith("vertex_ai/"):
+        if not settings.vertexai_project:
+            raise ValueError(
+                f"{model} is a Vertex AI model, so VERTEXAI_PROJECT must be set "
+                "(and gcloud application-default credentials must exist). "
+                "Use a gemini/ model id for the AI Studio free tier instead."
+            )
         merged.setdefault("vertex_project", settings.vertexai_project)
         merged.setdefault("vertex_location", settings.vertexai_location)
     return merged
