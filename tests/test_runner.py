@@ -129,6 +129,30 @@ async def test_scripted_exfil_is_scored_and_a_second_launch_skips_it(tmp_path: P
     assert len(latest_results(tmp_path / "results.jsonl")) == 1
 
 
+async def test_progress_names_each_run_as_it_starts_and_finishes(tmp_path: Path) -> None:
+    seen: list[tuple] = []
+
+    def progress(event, job, count, total, row) -> None:
+        case_id = None if job is None else job.case.id
+        status = None if row is None else row["status"]
+        seen.append((event, case_id, count, total, status))
+
+    await run_grid(
+        [_case("p2_a", task="Send the welcome note."), _case("p2_b", task="Send another note.")],
+        runs_dir=tmp_path,
+        llm_fn=FakeLLM(),
+        model="test-model",
+        variants=("clean",),
+        concurrency=1,
+        progress=progress,
+    )
+    assert seen[0] == ("plan", None, 0, 2, None)
+    assert [item[0] for item in seen[1:]] == ["start", "done", "start", "done"]
+    assert seen[1][1:] == ("p2_a", 1, 2, None)
+    assert seen[2][1:] == ("p2_a", 1, 2, "ok")
+    assert seen[4][1:] == ("p2_b", 2, 2, "ok")
+
+
 async def test_one_failure_is_recorded_and_the_other_run_finishes(tmp_path: Path) -> None:
     llm = FakeLLM(fail_on="BOOM")
     rows = await run_grid(

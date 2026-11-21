@@ -164,6 +164,18 @@ async def execute_run(
     return row
 
 
+def _report(
+    progress: Callable[..., None] | None,
+    event: str,
+    job: RunJob | None,
+    count: int,
+    total: int,
+    row: dict[str, Any] | None,
+) -> None:
+    if progress is not None:
+        progress(event, job, count, total, row)
+
+
 async def run_grid(
     cases: Sequence[AttackCase],
     *,
@@ -176,8 +188,15 @@ async def run_grid(
     concurrency: int = 2,
     limit: int | None = None,
     only: str | None = None,
+    progress: Callable[..., None] | None = None,
 ) -> list[dict[str, Any]]:
-    """Run every unfinished cell. Returns the rows written on this launch."""
+    """Run every unfinished cell. Returns the rows written on this launch.
+
+    ``progress(event, job, count, total, row)`` is called with ``plan`` before
+    any run, ``start`` when a cell begins, and ``done`` when its row is written.
+    ``count`` is the 1-based position for ``start`` and the number finished for
+    ``done``.
+    """
     done = latest_results(runs_dir / "results.jsonl")
     pending = [
         job
@@ -192,23 +211,35 @@ async def run_grid(
         if done.get(run_id_for(job.case.id, job.variant, job.defense, job.seed), {}).get("status")
         != "ok"
     ]
+    total = len(pending)
+    _report(progress, "plan", None, 0, total, None)
     semaphore = asyncio.Semaphore(concurrency)
     stop = asyncio.Event()
     written: list[dict[str, Any]] = []
+    finished = 0
+    finished_lock = asyncio.Lock()
 
-    async def _one(job: RunJob) -> dict[str, Any] | None:
+    async def _one(position: int, job: RunJob) -> dict[str, Any] | None:
+        nonlocal finished
         async with semaphore:
             if stop.is_set():
                 return None
+            _report(progress, "start", job, position, total, None)
             try:
                 row = await execute_run(job, runs_dir=runs_dir, llm_fn=llm_fn, model=model)
             except DailyQuotaExceeded:
                 stop.set()
                 raise
+            async with finished_lock:
+                finished += 1
+                done_count = finished
             written.append(row)
+            _report(progress, "done", job, done_count, total, row)
             return row
 
-    tasks = [asyncio.create_task(_one(job)) for job in pending]
+    tasks = [
+        asyncio.create_task(_one(position, job)) for position, job in enumerate(pending, start=1)
+    ]
     try:
         await asyncio.gather(*tasks)
     except DailyQuotaExceeded:
