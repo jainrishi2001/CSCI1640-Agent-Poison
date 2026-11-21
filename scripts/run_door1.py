@@ -14,8 +14,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from tqdm import tqdm
+
 from agent_sec.config import get_settings
-from agent_sec.eval.runner import latest_results, run_grid, summarize
+from agent_sec.eval.runner import RunJob, latest_results, run_grid, summarize
 from agent_sec.llm import DailyQuotaExceeded, chat
 from agent_sec.servers.poisoned import load_cases
 
@@ -65,6 +67,38 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _progress_line(
+    event: str,
+    job: RunJob | None,
+    count: int,
+    total: int,
+    row: dict[str, Any] | None,
+    bar: tqdm | None,
+) -> None:
+    """One flushed line per run so a captured terminal shows the live count."""
+    if event == "plan":
+        print(f"grid: {total} runs to do", flush=True)
+        return
+    assert job is not None
+    label = f"{job.case.id} {job.variant}"
+    if event == "start":
+        print(f"[{count}/{total}] running {label}", flush=True)
+        if bar is not None:
+            bar.set_postfix_str(f"running {label}", refresh=False)
+        return
+    status = "skipped" if row is None else str(row["status"])
+    detail = ""
+    score = None if row is None else row.get("score")
+    if score:
+        detail = f" attack={score['attack_success']} task={score['task_success']}"
+    elif row is not None and row.get("error_type"):
+        detail = f" {row['error_type']}"
+    print(f"[{count}/{total}] {status} {label}{detail}", flush=True)
+    if bar is not None:
+        bar.update(1)
+        bar.set_postfix_str(f"{status} {label}", refresh=False)
+
+
 async def launch(
     args: argparse.Namespace,
     *,
@@ -74,6 +108,19 @@ async def launch(
 ) -> int:
     """Run the selected cells and print rates from the latest results row of each run."""
     cases = load_cases(args.cases)
+    bar = tqdm(total=0, file=sys.stderr, mininterval=1, dynamic_ncols=True, unit="run")
+
+    def progress(
+        event: str,
+        job: RunJob | None,
+        count: int,
+        total: int,
+        row: dict[str, Any] | None,
+    ) -> None:
+        if event == "plan":
+            bar.reset(total=total)
+        _progress_line(event, job, count, total, row, bar)
+
     try:
         await run_grid(
             cases,
@@ -85,13 +132,16 @@ async def launch(
             concurrency=args.concurrency,
             limit=args.limit,
             only=args.only,
+            progress=progress,
         )
     except DailyQuotaExceeded:
         code = 1
     else:
         code = 0
+    finally:
+        bar.close()
     text = summarize(list(latest_results(runs_dir / "results.jsonl").values()))
-    print(text or "no runs recorded")
+    print(text or "no runs recorded", flush=True)
     return code
 
 
