@@ -6,6 +6,8 @@ Format: **date: decision.** Why. Consequences.
 
 ---
 
+**2026-11-19: Support both AI Studio and Vertex AI; AI Studio stays the default.** The model id prefix (`gemini/` or `vertex_ai/`) picks the provider per role, so the experiment can compare models across both, which matters because the provider changes which model is under test. AI Studio remains the $0 default. Vertex is opt-in, billed to the course GCP project, and capped by self-imposed `rpd` limits in `configs/limits.yaml`. Vertex serves current models only on the `global` location and offers Gemma 4 26B, not 31B, as a managed model; results from it must name the model and provider. Supersedes the Vertex part of the 2026-11-17 entry below.
+
 **2026-11-17: Pin `SYSTEM_AS_USER=false`.** A live run showed Gemma 4 31B accepts the system role (`system_role_mode = system`). Pinning it means every run uses the same instruction placement, which matters because placement affects injection resistance. Report it in the paper.
 
 **2026-11-17: Write our own door-1 cases in MCPTox's three styles instead of depending on the MCPTox dataset.** The dataset is only available through an anonymized link that may disappear, and its cases target real servers we don't run. We cite MCPTox for the design (P1/P2/P3 plus rug pulls).

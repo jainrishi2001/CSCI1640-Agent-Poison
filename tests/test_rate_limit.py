@@ -81,14 +81,26 @@ def test_rpm_window_blocks_then_releases(tmp_path: Path) -> None:
 def test_tpm_window_blocks_then_releases(tmp_path: Path) -> None:
     clock = FakeClock()
     limiter = _limiter(tmp_path / "quota.json", clock, rpm=100, tpm=100, rpd=100)
-    limiter.before_call("m", 70)
-    limiter.after_call("m", 70)
+    first = limiter.before_call("m", 70)
+    limiter.after_call("m", first.id, 70)
     limiter.before_call("m", 40)
     assert clock.t == 1_700_000_000.0 + 60
 
     held = clock.t
     limiter.before_call("m", 40)
     assert clock.t == held
+
+
+def test_overlapping_calls_update_their_own_reservations(tmp_path: Path) -> None:
+    clock = FakeClock()
+    limiter = _limiter(tmp_path / "quota.json", clock, rpm=10, tpm=100, rpd=100)
+    first = limiter.before_call("m", 40)
+    second = limiter.before_call("m", 40)
+    limiter.after_call("m", first.id, 90)
+    limiter.after_call("m", second.id, 5)
+
+    limiter.before_call("m", 10)
+    assert clock.t == 1_700_000_000.0 + 60
 
 
 def test_daily_quota_raises_at_the_margin_and_survives_reload(tmp_path: Path) -> None:
@@ -113,12 +125,21 @@ def test_daily_quota_raises_at_the_margin_and_survives_reload(tmp_path: Path) ->
 def test_limits_yaml_has_the_free_tier_models() -> None:
     config = load_limits()
     assert config.safety_margin == pytest.approx(0.85)
-    assert set(config.models) == {
+    assert {
         "gemini/gemma-4-31b-it",
         "gemini/gemma-4-26b-a4b-it",
         "gemini/gemini-3.1-flash-lite",
         "gemini/gemini-3.5-flash-lite",
-    }
+    } <= set(config.models)
+
+
+def test_limits_yaml_has_the_vertex_models() -> None:
+    config = load_limits()
+    assert {
+        "vertex_ai/gemini/gemma-4-26b-a4b-it-maas",
+        "vertex_ai/gemini-3.1-flash-lite",
+        "vertex_ai/gemini-3.5-flash",
+    } <= set(config.models)
 
 
 def test_retry_after_is_honored_and_backoff_is_exponential(

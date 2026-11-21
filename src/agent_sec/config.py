@@ -1,8 +1,15 @@
 """Runtime settings loaded from the process environment and an optional ``.env``.
 
 Model ids are never hardcoded. Callers read ``target_model``, ``attacker_model``,
-and ``monitor_model`` from the environment. Gemini free-tier ids look like
-``gemini/<model-name>``; Vertex ids look like ``vertex_ai/<model-name>``.
+and ``monitor_model`` from the environment. The id prefix picks the provider:
+
+- ``gemini/<model-name>``: Google AI Studio (free tier), authenticated with
+  ``GEMINI_API_KEY``. This is the default setup.
+- ``vertex_ai/<model-name>``: Vertex AI on a GCP project, authenticated with
+  gcloud application-default credentials. Needs ``VERTEXAI_PROJECT``; current
+  models are served from the ``global`` location.
+
+Each role can use either provider, so models from both can be compared.
 """
 
 from pydantic import field_validator
@@ -18,8 +25,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    vertexai_project: str
-    vertexai_location: str = "us-central1"
+    # Only needed for vertex_ai/ model ids; AI Studio users can leave it unset.
+    vertexai_project: str | None = None
+    # Current Gemini 3.x and Gemma 4 models on Vertex answer only on "global".
+    vertexai_location: str = "global"
     target_model: str
     attacker_model: str
     monitor_model: str
@@ -29,9 +38,9 @@ class Settings(BaseSettings):
     # after a model rejects the system role. True always folds; False never does.
     system_as_user: bool | None = None
 
-    @field_validator("gemini_api_key", mode="before")
+    @field_validator("gemini_api_key", "vertexai_project", mode="before")
     @classmethod
-    def _blank_api_key_is_none(cls, value: object) -> object:
+    def _blank_is_none(cls, value: object) -> object:
         if isinstance(value, str) and value.strip() == "":
             return None
         return value

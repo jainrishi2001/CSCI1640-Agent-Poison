@@ -4,3 +4,8 @@ models:
   gemini/gemma-4-26b-a4b-it:    {rpm: 30, tpm: 16000,  rpd: 14400}
   gemini/gemini-3.1-flash-lite: {rpm: 15, tpm: 250000, rpd: 500}
   gemini/gemini-3.5-flash-lite: {rpm: 15, tpm: 250000, rpd: 500}
+  # Vertex AI (paid, global endpoint). These are self-imposed caps, not provider
+  # limits: rpd bounds how many billed calls one day of runs can make.
+  vertex_ai/gemini/gemma-4-26b-a4b-it-maas: {rpm: 60, tpm: 400000, rpd: 2000}
+  vertex_ai/gemini-3.1-flash-lite:          {rpm: 60, tpm: 400000, rpd: 2000}
+  vertex_ai/gemini-3.5-flash:               {rpm: 60, tpm: 400000, rpd: 1000}

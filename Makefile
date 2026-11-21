@@ -1,4 +1,4 @@
-.PHONY: setup test lint smoke demo
+.PHONY: setup test lint smoke demo door1-pilot door1
 
 setup:
 	uv sync
@@ -14,3 +14,9 @@ smoke:
 
 demo:
 	uv run python scripts/demo_task.py
+
+door1-pilot:
+	uv run python scripts/run_door1.py --limit 4 --variants clean,poisoned --concurrency 1
+
+door1:
+	uv run python scripts/run_door1.py --concurrency 2
